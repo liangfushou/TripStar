@@ -13,7 +13,7 @@
 
 > [!IMPORTANT]
 > 
-> 可直接魔撘平台已部署的项目：[旅途星辰 (TripStar) - AI 旅行智能体](https://modelscope.cn/studios/lcclxy/Journey-to-the-China)
+> 可直接魔撘平台使用已部署的项目：[旅途星辰 (TripStar) - AI 旅行智能体](https://modelscope.cn/studios/lcclxy/Journey-to-the-China)
 > 
 > 其中包括：旅行计划、景点地图、预算明细、每日行程：行程描述、交通方式、住宿推荐、景点安排（地址、游览时长、景点描述）、餐饮安排、天气信息、知识图谱可视化、沉浸式伴游 AI 问答......
 
@@ -198,7 +198,7 @@ helloagents-trip-planner-new/
 └── README.md
 ```
 
-> 下面是部分运行结果，有了它，旅游攻略可快速完成！🦖
+> 下面是部分运行结果，丰富的功能探索ing，欢迎大家提issues🦖
 <img width="500" height="1818" alt="旅行计划_杭州_1772887217932" src="https://github.com/user-attachments/assets/ced55dae-e03e-433a-af9d-9f3c26d34563" />
 
 ## 🛠️ 后续可扩展方向 (Roadmap)
