@@ -30,47 +30,48 @@
 
 ```mermaid
 graph TD
-    subgraph 前端交互视图 (Vue 3 + Vite)
-        A1[参数输入 Home.vue]
-        A2[沉浸加载动画]
-        A3[高定路书 Result.vue]
-        A4[知识图谱侧边栏]
-        A5[AI 旅行智能体浮窗]
+    subgraph G1 ["前端交互视图"]
+        A1["参数输入 Home.vue"]
+        A2["沉浸加载动画"]
+        A3["高定路书 Result.vue"]
+        A4["知识图谱侧边栏"]
+        A5["AI 旅行智能体浮窗"]
     end
 
-    subgraph 后端网关 (FastAPI)
-        B1[异步轮询机制: POST /plan & GET /status]
-        B2[上下文伴游问答: POST /chat/ask]
+    subgraph G2 ["后端网关"]
+        B1["异步轮询机制 <br/> POST/plan & GET/status"]
+        B2["上下文伴游问答<br/>POST/chat/ask"]
     end
 
-    subgraph 多智能体协同引擎 (HelloAgents)
-        C1[旅程总控 Agent]
-        C2[景点规划 Agent]
-        C3[天气预报 Agent]
-        C4[酒店推荐 Agent]
+    subgraph G3 ["多智能体协同引擎"]
+        C1["旅程总控 Agent"]
+        C2["景点规划 Agent"]
+        C3["天气预报 Agent"]
+        C4["酒店推荐 Agent"]
     end
 
-    subgraph 外部服务层
-        D1[LLM 模型 API <br> qwen-max / intern-latest]
-        D2[高德 MCP Server <br> 地理编码 / POI搜索]
-        D3[天气/时间检索工具]
+    subgraph G4 ["服务层"]
+        D1["LLM模型API <br/> qwen/intern-latest"]
+        D2["高德 MCP Server <br/> 地理编码/POI搜索"]
+        D3["天气/时间检索工具"]
     end
 
     %% 交互连线
-    A1 -->|提交需求| B1
-    A3 <-->|状态轮询| B1
-    A5 <-->|携带完整行程上下文| B2
+    A1 --> B1
+    A3 <--> B1
+    A5 <--> B2
 
-    B1 -->|驱动计划| C1
-    B2 -->|直接调用| D1
+    B1 --> C1
+    B2 --> D1
 
-    C1 -->|下发任务 (并发)| C2
-    C1 -->|下发任务 (并发)| C3
-    C1 -->|下发任务 (并发)| C4
+    C1 --> C2
+    C1 --> C3
+    C1 --> C4
 
-    C2 <-->|MCP Protocol| D2
-    C3 <-->|Function Calling| D3
-    C4 <-->|MCP Protocol| D2
+    C2 <--> D2
+    C3 <--> D3
+    C4 <--> D2
+
 ```
 
 ---
