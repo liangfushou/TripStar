@@ -13,3 +13,4 @@ uv>=0.8.0
 python-dateutil>=2.8.2
 huggingface_hub>=0.25.0
 pypinyin>=0.55.0
+xhs>=0.2.6

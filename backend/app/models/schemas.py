@@ -70,6 +70,8 @@ class Attraction(BaseModel):
     poi_id: Optional[str] = Field(default="", description="POI ID")
     image_url: Optional[str] = Field(default=None, description="图片URL")
     ticket_price: int = Field(default=0, description="门票价格(元)")
+    reservation_required: Optional[bool] = Field(default=False, description="是否需要提前预约")
+    reservation_tips: Optional[str] = Field(default="", description="预约提示信息")
 
 
 class Meal(BaseModel):
@@ -120,6 +122,8 @@ class WeatherInfo(BaseModel):
     @classmethod
     def parse_temperature(cls, v):
         """解析温度,移除°C等单位"""
+        if v is None:
+            return 0
         if isinstance(v, str):
             # 移除°C, ℃等单位符号
             v = v.replace('°C', '').replace('℃', '').replace('°', '').strip()

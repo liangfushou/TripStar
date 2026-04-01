@@ -72,9 +72,20 @@ async def _run_trip_planning(task_id: str, request: TripRequest):
         print(f"❌ 任务 {task_id} 失败: {e}")
         import traceback
         traceback.print_exc()
+        
+        # 针对小红书 Cookie 过期异常做出特殊处理返回给前端
+        try:
+            from ...services.xhs_service import XHSCookieExpiredError
+            if isinstance(e, XHSCookieExpiredError):
+                error_msg = f"【认证失败】{str(e)}"
+            else:
+                error_msg = str(e)
+        except ImportError:
+            error_msg = str(e)
+
         _tasks[task_id] = {
             "status": "failed",
-            "error": str(e)
+            "error": error_msg
         }
 
 

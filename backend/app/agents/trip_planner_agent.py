@@ -111,7 +111,9 @@ PLANNER_AGENT_PROMPT = """你是行程规划专家。你的任务是根据景点
           "visit_duration": 120,
           "description": "景点详细描述",
           "category": "景点类别",
-          "ticket_price": 60
+          "ticket_price": 60,
+          "reservation_required": false,
+          "reservation_tips": ""
         }
       ],
       "meals": [
@@ -155,6 +157,8 @@ PLANNER_AGENT_PROMPT = """你是行程规划专家。你的任务是根据景点
    - 餐饮预估费用(estimated_cost)
    - 酒店预估费用(estimated_cost)
    - 预算汇总(budget)包含各项总费用
+9. **预约信息透传**: 如果景点搜索数据中包含 reservation_required 和 reservation_tips 字段，请务必将它们完整保留在对应景点的JSON中。需要预约的景点请在 description 中也提醒游客提前预约
+8. **景点图片**: 不需要在JSON中填写 image_url 字段，图片由前端根据景点名称自动从小红书获取。
 """
 
 
@@ -179,14 +183,14 @@ class MultiAgentTripPlanner:
                 auto_expand=True
             )
 
-            # 创建景点搜索Agent
-            print("  - 创建景点搜索Agent...")
-            self.attraction_agent = SimpleAgent(
-                name="景点搜索专家",
-                llm=self.llm,
-                system_prompt=ATTRACTION_AGENT_PROMPT
-            )
-            self.attraction_agent.add_tool(self.amap_tool)
+            # 取消高德景点 Agent,改用原生小红书服务
+            # print("  - 创建景点搜索Agent...")
+            # self.attraction_agent = SimpleAgent(
+            #     name="景点搜索专家",
+            #     llm=self.llm,
+            #     system_prompt=ATTRACTION_AGENT_PROMPT
+            # )
+            # self.attraction_agent.add_tool(self.amap_tool)
 
             # 创建天气查询Agent
             print("  - 创建天气查询Agent...")
@@ -215,7 +219,7 @@ class MultiAgentTripPlanner:
             )
 
             print(f"✅ 多智能体系统初始化成功")
-            print(f"   景点搜索Agent: {len(self.attraction_agent.list_tools())} 个工具")
+            # print(f"   景点搜索Agent: {len(self.attraction_agent.list_tools())} 个工具")
             print(f"   天气查询Agent: {len(self.weather_agent.list_tools())} 个工具")
             print(f"   酒店推荐Agent: {len(self.hotel_agent.list_tools())} 个工具")
 
@@ -252,13 +256,14 @@ class MultiAgentTripPlanner:
             print("⏳ 依次执行步骤1-3: 搜索景点 -> 查询天气 -> 搜索酒店...")
 
             # 构建各Agent的查询
-            attraction_query = self._build_attraction_query(request)
             weather_query = f"请查询{request.city}的天气信息"
             hotel_query = f"请搜索{request.city}的{request.accommodation}酒店"
 
             # 依次执行,避免多个线程同时启动 uvx 子进程导致资源竞争和超时
-            print("  [1/3] 正在搜索景点...")
-            attraction_response = await asyncio.to_thread(self.attraction_agent.run, attraction_query)
+            print("  [1/3] 正在使用小红书服务搜索景点...")
+            from ..services.xhs_service import search_xhs_attractions
+            keywords = request.preferences[0] if request.preferences else "景点"
+            attraction_response = await asyncio.to_thread(search_xhs_attractions, request.city, keywords)
             print(f"📍 景点搜索结果: {attraction_response[:200]}...")
 
             print("  [2/3] 正在查询天气...")
@@ -339,9 +344,83 @@ class MultiAgentTripPlanner:
 
         return query
     
+    def _sanitize_json_str(self, json_str: str) -> str:
+        """清理大模型输出中常见的 JSON 格式污染"""
+        import re as _re
+        # 1. 移除可能包裹在外面的 ```json ... ``` 标记
+        json_str = _re.sub(r'^```(?:json)?\s*', '', json_str.strip())
+        json_str = _re.sub(r'```\s*$', '', json_str.strip())
+        # 2. 移除 JS 风格注释 // ... 和 /* ... */
+        json_str = _re.sub(r'//[^\n]*', '', json_str)
+        json_str = _re.sub(r'/\*.*?\*/', '', json_str, flags=_re.DOTALL)
+        # 3. 移除 JSON 值中的控制字符
+        json_str = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', json_str)
+        # 4. 修复尾部逗号: },] 或 },}
+        json_str = _re.sub(r',\s*([\]\}])', r'\1', json_str)
+        # 5. 修复中文引号和全角标点
+        #    注意: 中文双引号""必须替换为单引号，因为它们通常出现在 JSON 字符串值内部
+        #    如果替换为标准双引号会破坏 JSON 结构！
+        json_str = json_str.replace('\u201c', "'").replace('\u201d', "'")
+        json_str = json_str.replace('\u2018', "'").replace('\u2019', "'")
+        json_str = json_str.replace('\uff1a', ':')
+        json_str = json_str.replace('\uff0c', ',')
+        return json_str
+    
+    def _fix_unescaped_quotes(self, json_str: str) -> str:
+        """修复 JSON 字符串值内部未转义的双引号
+        
+        例如: "description": "这是"好的"景点" 
+        修复为: "description": "这是'好的'景点"
+        """
+        import re as _re
+        result = []
+        i = 0
+        in_string = False
+        escape_next = False
+        
+        while i < len(json_str):
+            ch = json_str[i]
+            
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                i += 1
+                continue
+            
+            if ch == '\\' and in_string:
+                escape_next = True
+                result.append(ch)
+                i += 1
+                continue
+            
+            if ch == '"':
+                if not in_string:
+                    in_string = True
+                    result.append(ch)
+                else:
+                    # 看下一个非空白字符是否是 JSON 结构字符
+                    rest = json_str[i+1:].lstrip()
+                    if rest and rest[0] in (',', '}', ']', ':'):
+                        # 这是真正的字符串结尾引号
+                        in_string = False
+                        result.append(ch)
+                    elif not rest:
+                        # 到末尾了，也是结尾引号
+                        in_string = False
+                        result.append(ch)
+                    else:
+                        # 内嵌的未转义引号，替换为单引号
+                        result.append("'")
+            else:
+                result.append(ch)
+            
+            i += 1
+        
+        return ''.join(result)
+
     def _parse_response(self, response: str, request: TripRequest) -> TripPlan:
         """
-        解析Agent响应
+        解析Agent响应，带有多层容错清理
         
         Args:
             response: Agent响应文本
@@ -350,9 +429,9 @@ class MultiAgentTripPlanner:
         Returns:
             旅行计划
         """
+        import re as _re
         try:
             # 尝试从响应中提取JSON
-            # 查找JSON代码块
             if "```json" in response:
                 json_start = response.find("```json") + 7
                 json_end = response.find("```", json_start)
@@ -362,15 +441,42 @@ class MultiAgentTripPlanner:
                 json_end = response.find("```", json_start)
                 json_str = response[json_start:json_end].strip()
             elif "{" in response and "}" in response:
-                # 直接查找JSON对象
                 json_start = response.find("{")
                 json_end = response.rfind("}") + 1
                 json_str = response[json_start:json_end]
             else:
                 raise ValueError("响应中未找到JSON数据")
             
-            # 解析JSON
-            data = json.loads(json_str)
+            # ====== 第1轮：基础清理 + 解析 ======
+            json_str = self._sanitize_json_str(json_str)
+            
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e1:
+                # 打印出错位置附近的内容供远程调试
+                pos = e1.pos if hasattr(e1, 'pos') else 0
+                context_start = max(0, pos - 60)
+                context_end = min(len(json_str), pos + 60)
+                print(f"⚠️  首次 JSON 解析失败: {e1}")
+                print(f"   出错位置附近内容: ...{json_str[context_start:context_end]}...")
+                
+                # ====== 第2轮：修复内嵌未转义引号 ======
+                print(f"   尝试修复未转义引号...")
+                fixed = self._fix_unescaped_quotes(json_str)
+                try:
+                    data = json.loads(fixed)
+                except json.JSONDecodeError as e2:
+                    print(f"⚠️  第2轮修复仍失败: {e2}")
+                    
+                    # ====== 第3轮：暴力正则提取最外层对象 ======
+                    print(f"   尝试正则提取最外层JSON对象...")
+                    match = _re.search(r'\{[\s\S]*\}', json_str)
+                    if match:
+                        brutal = self._sanitize_json_str(match.group())
+                        brutal = self._fix_unescaped_quotes(brutal)
+                        data = json.loads(brutal)
+                    else:
+                        raise
             
             # 转换为TripPlan对象
             trip_plan = TripPlan(**data)

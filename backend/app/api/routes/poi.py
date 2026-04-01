@@ -4,7 +4,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from ...services.amap_service import get_amap_service
-from ...services.unsplash_service import get_unsplash_service
 
 router = APIRouter(prefix="/poi", tags=["POI"])
 
@@ -89,7 +88,7 @@ async def search_poi(keywords: str, city: str = "北京"):
 @router.get(
     "/photo",
     summary="获取景点图片",
-    description="根据景点名称从Unsplash获取图片"
+    description="根据景点名称从小红书获取图片"
 )
 async def get_attraction_photo(name: str, city: Optional[str] = None):
     """
@@ -97,42 +96,24 @@ async def get_attraction_photo(name: str, city: Optional[str] = None):
 
     Args:
         name: 景点名称
-        city: 所在城市(用于提升搜索准确率)
+        city: 所在城市
 
     Returns:
         图片URL
     """
     try:
-        unsplash_service = get_unsplash_service()
-
-        import pypinyin
+        from ...services.xhs_service import get_photo_from_xhs
         
-        # 将景点名称转为无声调的拼音 (例如: 钟楼 -> zhong lou)
-        pinyin_list = pypinyin.pinyin(name, style=pypinyin.Style.NORMAL)
-        pinyin_name = "".join([p[0] for p in pinyin_list])
-        
-        # 尝试 1: 景点拼音 + China
-        query_attraction = f"{pinyin_name} China"
-        photo_url = await unsplash_service.get_photo_url(query_attraction)
+        # 为了避免同名的流行歌曲（如许嵩的《断桥残雪》）、小说或人名干扰
+        # 强制带上前缀“景点”，能够绝对限定搜索范围在旅游打卡贴内
+        query_kw = f"{name} 照片"
+        photo_url = await get_photo_from_xhs(query_kw)
 
         if not photo_url:
-            # 尝试 2: 如果有城市参数，使用真实的城市拼音做兜底
-            if city:
-                city_pinyin_list = pypinyin.pinyin(city, style=pypinyin.Style.NORMAL)
-                city_pinyin = "".join([p[0] for p in city_pinyin_list])
-            else:
-                # 非常弱的备用方案(当city为空时)
-                city_prefix = name[:2]
-                city_pinyin_list = pypinyin.pinyin(city_prefix, style=pypinyin.Style.NORMAL)
-                city_pinyin = "".join([p[0] for p in city_pinyin_list])
+            # 兜底：交由前端展示默认占位图
+            print(f"⚠️ 无法为 {name} 找到对应的小红书景点图片，返回空")
+            photo_url = ""
             
-            query_city = f"{city_pinyin} China landmark"
-            photo_url = await unsplash_service.get_photo_url(query_city, randomize=True)
-            
-        if not photo_url:
-            # 尝试 3: 最泛的兜底，保证一定有图
-            photo_url = await unsplash_service.get_photo_url("beautiful ancient architecture China", randomize=True)
-
         return {
             "success": True,
             "message": "获取图片成功",
@@ -148,3 +129,4 @@ async def get_attraction_photo(name: str, city: Optional[str] = None):
             status_code=500,
             detail=f"获取景点图片失败: {str(e)}"
         )
+

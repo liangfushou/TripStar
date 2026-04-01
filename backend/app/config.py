@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # 应用基本配置
     app_name: str = "HelloAgents智能旅行助手"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     debug: bool = False
 
     # 服务器配置
@@ -34,9 +34,8 @@ class Settings(BaseSettings):
     # 高德地图API配置
     vite_amap_web_key: str = ""
 
-    # Unsplash API配置
-    unsplash_access_key: str = ""
-    unsplash_secret_key: str = ""
+    # 小红书配置
+    xhs_cookie: str = ""
 
     # LLM配置 (从环境变量读取,由HelloAgents管理)
     openai_api_key: str = ""
@@ -98,6 +97,7 @@ def print_config():
     print(f"版本: {settings.app_version}")
     print(f"服务器: {settings.host}:{settings.port}")
     print(f"高德地图API Key: {'已配置' if settings.vite_amap_web_key else '未配置'}")
+    print(f"小红书Cookie: {'已配置' if settings.xhs_cookie else '未配置'}")
 
     # 检查LLM配置
     llm_api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
